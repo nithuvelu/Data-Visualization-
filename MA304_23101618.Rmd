@@ -1,0 +1,645 @@
+---
+title: "Meteorological Mapping of Criminal Hotspots: A Data-Driven Approach to Public Safety in Colchester"
+output:
+  html_document: default
+  pdf_document: default
+date: "2024-04-16"
+---
+
+
+# Introduction
+
+In our modern world, utilizing data to address societal issues has become increasingly important. This report digs into a data-driven approach aimed at enhancing public safety in Colchester, utilizing meteorological data and crime incident reports. By analyzing patterns and correlations between crime incidents and weather conditions, it aims to provide information that could potentially inform proactive measures for improving community safety. By finding out the risk of crime and identifying frequent crime occurrences, authorities can better allocate resources and implement safety measures, particularly in high-risk areas or specific streets. Additionally, understanding the outcome status of cases or incidents can help police prioritize their efforts, focusing on important cases rather than those that may not be suspected of significant impact on public safety.
+
+```{r}
+
+getwd()
+setwd("/Users/nithyashree/Documents/Data Visualization")
+#read the data
+crime420co4 <- read.csv("crime23.csv")
+temp180co4  <- read.csv("temp2023.csv")
+```
+
+
+```{r}
+library(stringr)
+library(lubridate)
+library(DT)
+library(dplyr)
+library(plotly)
+library(ggplot2)
+library(viridis)
+library(MASS)
+library(leaflet)
+```
+
+```{r}
+
+# View the structure of the data frames
+str(crime420co4)
+str(temp180co4)
+
+# Check for missing values
+sum(is.na(crime420co4))
+sum(is.na(temp180co4))
+
+
+```
+
+
+# Data Preparation
+
+Data preparation is a critical step in the analytical process, essential for ensuring the integrity and reliability of data sources. Before embarking on the analytical journey, one must ensure the integrity and reliability of the data sources.
+
+## Crime Data Cleaning
+The crime dataset, initially in a raw state, underwent a accurate cleaning process to address missing values, standardize formats, and remove irrelevant information. Numeric columns were treated with care, ensuring that missing values were replaced with appropriate measures of central tendency. Textual data, such as street names, was converted to a consistent format, helpful in accurate analysis and visualization.
+```{r}
+
+# Create a new variable for the cleaned dataset
+cleaned_crimeco4 <- crime420co4
+
+#Get list of numeric columns
+num_co4_col <- sapply(cleaned_crimeco4, is.numeric)
+
+# Replace NA values in numeric columns with mean
+cleaned_crimeco4[num_co4_col] <- lapply(cleaned_crimeco4[num_co4_col], function(x) {
+    ifelse(is.na(x), round(mean(x, na.rm = TRUE), 1), x)
+})
+
+# Data cleaning for cleaned_crimeco4
+# Fill missing values in outcome_status
+cleaned_crimeco4$outcome_status[is.na(cleaned_crimeco4$outcome_status)] <- "No Information"
+
+# Clean street names in crime data
+cleaned_crimeco4$street_name <- str_trim(str_to_lower(cleaned_crimeco4$street_name))
+
+# Parse the date column in the cleaned_crimeco4 dataset
+cleaned_crimeco4$date <- ym(cleaned_crimeco4$date)
+
+# Remove irrelevant columns (context, location_subtype)
+cleaned_crimeco4 <- subset(cleaned_crimeco4, select = -c(context, location_subtype))
+
+head(cleaned_crimeco4)
+
+
+```
+
+## Climate Data Cleaning
+
+Similar to the crime data cleaning process, the weather dataset underwent similar transformations to ensure consistency and completeness. Numeric columns were checked for missing values, which were filled in with mean values to keep the data reliable. Irrelevant variables were spotted and taken out, making the dataset simpler for analysis.
+
+```{r}
+
+#cleaned dataset name
+cleaned_tempco4 <- temp180co4
+
+# List of numeric columns in temp180co4
+num_col_tempco4 <- sapply(cleaned_tempco4, is.numeric)
+
+# Replace NA values in numeric columns with mean, preserving original precision
+cleaned_tempco4[num_col_tempco4] <- lapply(cleaned_tempco4[num_col_tempco4], function(x) {
+  ifelse(is.na(x), round(mean(x, na.rm = TRUE), 1), x)  
+})
+
+
+
+# Parse the Date column in temp180co4 dataset
+cleaned_tempco4$Date <- ymd(cleaned_tempco4$Date)
+
+# Remove irrelevant columns (PreselevHp, SnowDepcm)
+cleaned_tempco4 <- cleaned_tempco4[, !names(cleaned_tempco4) %in% c("PreselevHp", "SnowDepcm")]
+
+head(cleaned_tempco4)
+
+
+```
+
+```{r}
+# View the structure of the data frames
+str(cleaned_tempco4)
+str(cleaned_crimeco4)
+# Check for missing values
+sum(is.na(cleaned_tempco4))
+sum(is.na(cleaned_crimeco4))
+
+```
+
+
+# Analyzing Patterns and Trends through Visual Exploration
+
+
+In today's society, crimes like shoplifting, theft, and antisocial behavior significantly impact public safety and community harmony. Shoplifting, besides causing financial losses to businesses, raises prices for consumers. Additionally, theft and antisocial behavior create a sense of fear and insecurity among residents, affecting their daily lives and community trust. Recognizing the occurrence of these crimes through data analysis is crucial for law enforcement and policymakers to implement effective interruption. By addressing these issues, authorities can strive towards safer and more united communities for all.
+
+
+```{r}
+# Create a table of crime categories and their frequencies
+crime_catco4_freq <- table(cleaned_crimeco4$category)
+
+# Convert the table to a data frame
+crime_catco4_df <- as.data.frame(crime_catco4_freq)
+
+# Rename the columns for better visualization
+colnames(crime_catco4_df) <- c("Crime_Category", "Frequency")
+```
+
+
+## Exploring Crime Incident Frequencies and Street-Level Patterns
+```{r}
+
+
+# Calculate percentages for the frequency table
+cat_table_percco4 <- prop.table(crime_catco4_freq) * 100
+
+# Convert the table to a data frame and include percentages
+#cat_table_dfco4 <- as.data.frame.table(crime_catco4_freq)
+crime_catco4_df$Percentage <- paste0(round(cat_table_percco4, 2), "%")
+
+# Create a two-way table for 'category' and 'street_name'
+tw_co4 <- table(cleaned_crimeco4$category, cleaned_crimeco4$street_name)
+
+# Calculate percentages for the two-way table
+tw_streetco4_per <- prop.table(tw_co4, margin = 1) * 100
+
+# Convert tables to data frames and include percentages
+tw_df <- as.data.frame(tw_co4)
+tw_df$Percentage <- paste0(round(tw_streetco4_per, 2), "%")
+
+# Create interactive tables
+datatable(crime_catco4_df, caption = "Frequency Analysis of Crime Categories")
+datatable(tw_df, caption = "Distribution of Crime Categories Across Streets")
+
+
+
+```
+Frequency and two-way tables play a crucial role in data visualization by providing a structured representation of crime incident data. These tables offer a concise summary of the frequency and distribution of crime categories across different variables, such as categories and street names. By converting raw data into tabular format and including percentages, stakeholders can easily identify patterns, trends, and disparities in crime occurrence.Analyzing crime incident frequencies provides valuable information about the occurrence of various crime types in the community. The frequency table gives a clear picture of which crime categories are most common. Moreover, the two-way table shows how different crime categories are distributed across specific streets, revealing where certain crimes are more likely to happen. Including percentages in these tables helps understand the relative occurrence of each crime type and its distribution across streets.
+
+
+## Unveiling Colchester's Crime Spectrum
+```{r}
+
+# Create an interactive bar plot for crime category in the crime dataset
+barpt_co4 <- plot_ly(data = crime_catco4_df, y = ~Crime_Category, x = ~Frequency, type = 'bar', 
+                     orientation = 'h',
+                     name = "Category Frequency",
+                     marker = list(color = "maroon")) %>%
+              #title for the bar plot
+             layout(title = "Colchester's Crime Spectrum",
+                    #x-axis label
+                    yaxis = list(title = "Crimes Category"),
+                    #y- axis label
+                    xaxis = list(title = "Frequency"))
+
+# Display the interactive plot
+barpt_co4
+
+
+```
+
+Bar plots are effective visual tools for comparing the frequencies of different categories, allowing decision-makers to prioritize resource allocation .In this case the interactive bar plot shows the dominance of violent crime stands tall among other categories, with a count of 2633 incidents. This visualization serves as a crucial tool in identifying widespread crime types, enabling law enforcement to prioritize resources effectively. The importance of violent offenses underscores the urgency of proactive measures aimed at enhancing community safety and suppressing criminal activity.
+
+## Crime Category Distribution Across Colchester Streets"
+```{r}
+
+# Create a bar plot with ggplot
+p_barco4 <- ggplot(cleaned_crimeco4, aes(x = street_name, fill = category)) +
+  geom_bar() +
+  theme(axis.text.x = element_blank()) +
+  labs(title = "Crime Category Distribution Across Colchester Streets",
+       x = "Street Name",
+       y = "Count of Incidents")
+
+# Convert it to an interactive chart
+p_barco4_intrctive <- ggplotly(p_barco4)
+
+# Display the interactive chart
+p_barco4_intrctive
+
+
+```
+
+This stacked bar chart displays the distribution of crime categories across various streets in Colchester. Each segment represents a different crime category, and the height of each segment indicates the count of incidents. It helps identify areas where specific crimes occur more frequently, assisting in decisions such as increasing patrols, implementing targeted community programs, or enhancing surveillance measures. Additionally, the stacked nature of the bars helps easy comparison between streets and crime categories, enabling more informed decision-making to address public safety concerns effectively.
+
+
+## Identifying Hotspots: Top 10 Streets for Violent Crime Incidents
+```{r}
+
+# Filter dataset to retrieve only violent crime incidents
+vc_co4 <- cleaned_crimeco4 %>%
+  filter(category == "violent-crime")
+
+# Count occurrences of violent crime incidents for each street
+strt_cunts <- vc_co4 %>%
+  count(street_name) %>%
+  arrange(desc(n))  
+
+# Select the top 10 streets
+top_10_strts <- strt_cunts %>%
+  slice_max(n, n = 10)
+
+# Define a qualitative color palette from Color Brewer
+color_palette <- c("#e41a1c", "#377eb8", "#4daf4a", "#984ea3", "#ff7f00", "#ffff33", "#a65628", "#f781bf", "#999999")
+
+# Create a pie chart for the top 10 streets with custom colors 
+pie_chrt_co4 <- plot_ly(top_10_strts, labels = ~street_name, values = ~n, type = 'pie',
+                     textinfo = 'none', marker = list(colors = color_palette)) %>%
+  layout(title = "Distribution of Violent Crime Incidents for Top 10 Streets")
+
+# Convert the pie chart to an interactive plotly object
+pie_intrco4 <- ggplotly(pie_chrt_co4)
+
+# Display the interactive pie chart
+pie_intrco4
+
+```
+
+The pie chart above reveals where violent crimes are most common among Colchester's top 10 streets. Analyzing this data helps law enforcement target resources better. For instance, the street with the highest violent crime rate is "on or near" and "on and or near balkerne garden". This information enables focused mediation like more patrols and community alerts to improve safety and reduce crime in these areas. Specifically, "on or near" has the highest percentage of violent crime at 16.9%, closely followed by "on and or near balkerne garden" at 15.6%. This breakdown underscores the importance of prioritizing occurrences in these locations to address the frequency of violent crime effectively.
+
+
+
+## Analysis of Crime Categories and Outcome Status
+```{r}
+
+#use meaningful colours for bar plot
+custm_pal <- c("#E41A1C", "#377EB8", "#4DAF4A", "#984EA3", "#FF7F00", "#FFFF33", "#A65628", "#F781BF",
+                    "#999999", "#FFA500", "#DECF3F", "#0072B2", "#D55E00", "#CC79A7")
+
+# Create the bar plot
+bari_pltco4 <- ggplot(data = cleaned_crimeco4, aes(x = category, fill = outcome_status)) +
+  #the type of plot is dodge
+  geom_bar(position = "dodge") +
+  labs(title = "Distribution of Crime Categories by Outcome Status",
+       x = "Crime Category",
+       y = "Count",
+       fill = "Outcome Status") +
+  scale_x_discrete(labels = NULL) + 
+  scale_fill_manual(values = custm_pal) +  
+  theme_minimal() +
+  guides(fill = "none") +  
+  # Applies a minimal theme to the plot, removing unnecessary background elements and gridlines.
+  theme(panel.background = element_rect(fill = "lightgray"))  
+
+# Convert to plotly object
+bari_plt4_intcve <- ggplotly(bari_pltco4)
+
+# Display the interactive plot
+bari_plt4_intcve
+
+```
+This bar plot visualizes the relationship between crime categories and their outcome status in Colchester. Each bar represents a different crime category, and the colors within each bar denote various outcome statuses. From the plot, it's evident that violent crimes have the highest count among all categories, totaling 1299 incidents. However, many cases of violent crimes have an outcome status marked as "Unable to prosecute the suspect. This information is crucial for law enforcement as it highlights areas where crimes are most frequent and where further investigation or interruption is needed. By focusing on crimes with insufficient outcome status information, authorities can allocate resources more effectively, enhance investigative efforts, and potentially solve more cases, thereby improving public safety and trust in law enforcement.
+
+
+## Analysis of 2D Density Plot for Violent Crimes
+```{r}
+
+# Create the 2D density plot
+den_pltco4 <- ggplot(vc_co4, aes(x = date, y = lat)) +
+  geom_density_2d(alpha = 0.5) +  
+  labs(title = "2D Density Plot of Violent Crimes",
+       x = "Date",
+       y = "Latitude") +
+  theme_minimal() +
+  #set up the gery background
+  theme(panel.background = element_rect(fill = "grey90")) 
+
+# Convert ggplot object to plotly object
+den_pltco4_intr <- ggplotly(den_pltco4)
+
+# Display the interactive plot
+den_pltco4_intr
+```
+The 2D density plot provides a complete visualization of the distribution of violent crimes across both dates and latitude coordinates. By illustrating the density of incidents, it offers information into where and when violent crimes are most concentrated. Higher peaks in the density plot indicate areas or times of increased criminal activity, allowing law enforcement to identify hotspots and allocate resources accordingly. Moreover, patterns in the data, such as clusters of incidents at specific times or locations, become evident through the density plot. This information can inform strategic decisions regarding patrol routes, surveillance efforts, and community outreach programs. For instance, areas with consistently high densities may warrant increased patrols or targeted interventions, while temporal patterns can help optimize resource allocation during peak crime hours. Overall, the 2D density plot serves as a powerful visual tool for understanding the dynamics of violent crime and guiding data-driven approaches to crime prevention and intervention.
+
+## Analysis of Outcome Statuses Across Incident Categories
+```{r}
+
+# Create a ggplot object for the box plot
+g_boxco4 <- ggplot(cleaned_crimeco4, aes(x = factor(category), y = outcome_status))
+
+# Add the box plot layer
+g_boxco4 <- g_boxco4+ geom_boxplot(fill = "yellow", color = "purple") 
+
+# Set labels and title
+g_boxco4 <- g_boxco4+ labs(title = "Distribution of Outcome Status Across Incident Categories in Colchester",
+              x = "Incident Category")
+
+# Customize the plot appearance by rotating and aligning thr labels
+g_boxco4 <- g_boxco4+ theme_minimal() +
+       #rotate the label
+       theme(axis.text.x = element_text(angle = 45, hjust = 1),  
+             axis.text.y = element_blank(),  
+             panel.background = element_rect(fill = "grey90"))  
+
+# Convert ggplot object to plotly object
+g_boxco4_in <- ggplotly(g_boxco4)
+
+# Display the interactive plot
+g_boxco4_in
+
+```
+The box plot examines the distribution of outcome statuses across various incident categories in Colchester. Each box represents a specific incident category, with the vertical spread indicating the variability of outcome statuses within that category. This visualization helps the identification of any variations or outliers in the outcome statuses for each incident category, enabling law enforcement agencies to understand how different types of incidents are resolved. For example, if certain categories consistently display outcomes such as "Arrest" or "Unable to prosecute the suspect," it may indicate areas where additional resources or alternative approaches are required to enhance case resolution rates. Specifically, in the case of violent crimes, the box plot reveals that the maximum outcome status is under investigation, while the median outcome is "Unable to prosecute suspect." Additionally, the first quartile shows "Investigation complete, no suspect identified," suggesting the complexity of resolving violent crime cases and the need for targeted interventions to improve outcomes
+
+
+## Daily Trends in Violent Crime Counts with Smoothing
+```{r}
+
+# Convert date column to Date format using lubridate's ymd() function
+vc_co4$date <- ymd(vc_co4$date)
+
+# Group by date, violent crime count occurrences
+dly_vcco4_cs <- vc_co4 %>%
+  group_by(date) %>%
+  summarise(count = n(), .groups = "drop") %>%
+  ungroup()
+
+# Create a smoothed time series using loess smoothing
+smd_cont <- loess(count ~ as.numeric(date), data = dly_vcco4_cs)
+
+# Create the interactive time series plot using plotly
+plt_ty <- plot_ly(dly_vcco4_cs, x = ~date, y = ~count, type = 'scatter', mode = 'lines', name = 'Daily Counts') %>%
+  add_trace(x = dly_vcco4_cs$date, y = predict(smd_cont), mode = 'lines', name = 'Smoothed') %>%
+  layout(title = "Daily Violent Crime Counts with Smoothing",
+         xaxis = list(title = "Date"),
+         yaxis = list(title = "Count"))
+
+# Display the interactive plot
+plt_ty
+
+
+```
+
+During September 2023, the plot shows a peak in violent crime counts, with approximately 263 reported incidents. This spike indicates a period of increased criminal activity, which could be attributed to various factors such as seasonal trends or socioeconomic conditions etc., By tracking these patterns over time, authorities can pinpoint periods of increased criminal activity and adjust their response accordingly. Moreover, the smoothed trendline helps to highlight broader trends, making it easier to distinguish between long-term patterns and short-term ups and downs.
+
+## Analysis of Crime Counts and Temperature Trends Over Time
+```{r}
+# Convert Date column to character format
+cleaned_tempco4$Date <- as.character(cleaned_tempco4$Date)
+
+# Convert Date column to Date format
+cleaned_tempco4$Date <- ymd(cleaned_tempco4$Date)
+
+# Group crime data by date and count occurrences
+dc_count <- cleaned_crimeco4 %>%
+  group_by(date) %>%
+  summarise(count = n(), .groups = "drop")
+
+# Merge crime counts with temperature data
+mrge_dt <- left_join(dc_count, cleaned_tempco4, by = c("date" = "Date"))
+
+# Create time series plot with crime counts and temperature by setting the plot and customizing them
+tm_plt <- plot_ly(mrge_dt, x = ~date) %>%
+  add_trace(y = ~count, mode = "lines", name = "Crime Counts", type = 'scatter', line = list(color = 'red')) %>%
+  add_trace(y = ~TemperatureCAvg, mode = "lines", name = "Average Temperature", type = 'scatter', line = list(color = 'blue')) %>%
+  layout(title = "Crime Counts and Temperature Over Time",
+         xaxis = list(title = "Date"),
+         yaxis = list(title = "Count/Temperature"),
+         plot_bgcolor = "rgba(211,211,211,0.2)",  
+         paper_bgcolor = "rgba(211,211,211,0.2)")  
+
+# Display the interactive plot
+tm_plt
+
+
+
+```
+In July 2023, the plot indicates the highest average temperature recorded at 16.8 degrees Celsius. During this period, there were 584 reported crime incidents, suggesting a potential correlation between warmer temperatures and increased criminal activity. Conversely, January 2023 saw the highest crime count with 651 incidents, coinciding with a lower average temperature of 10.4 degrees Celsius. This observation highlights the complexity of factors influencing crime rates, including seasonal variations and temperature. Understanding these dynamics allows law enforcement to adapt strategies accordingly. For instance, during warmer months, additional patrols or community outreach programs may be implemented to address potential spikes in criminal activity. Versus, during colder months, efforts may focus on different aspects such as addressing socioeconomic factors or providing support to vulnerable communities.
+
+## Relationship Between Violent Crimes and Temperature Extremes
+```{r}
+
+# Convert date column to Date format
+vc_co4$date <- ymd(vc_co4$date)
+
+# Group by date and calculate minimum and maximum temperatures
+c_wtr_dta <- vc_co4 %>%
+  left_join(cleaned_tempco4, by = c("date" = "Date")) %>%
+  group_by(date) %>%
+  summarise(min_temp = min(TemperatureCMin, na.rm = TRUE),
+            max_temp = max(TemperatureCMax, na.rm = TRUE))
+
+# Create scatter plot of the minimum and maximum temperature of violent crime
+scattr_pltco4 <- plot_ly(data = c_wtr_dta, x = ~date) %>%
+  # Adding trace for minimum temperature
+  add_trace(y = ~min_temp, name = "Minimum Temperature", type = 'scatter', mode = 'markers', marker = list(color = 'skyblue')) %>%
+  # Adding trace for maximum temperature
+  add_trace(y = ~max_temp, name = "Maximum Temperature", type = 'scatter', mode = 'markers', marker = list(color = 'darkgreen')) %>%
+  # Layout adjustments
+  layout(title = "Minimum and Maximum Temperature During Violent Crimes",
+         xaxis = list(title = "Date"),
+         yaxis = list(title = "Temperature (°C)", side = "left"),
+         yaxis2 = list(title = "", overlaying = "y", side = "right"),
+         legend = list(x = 1.05, y = 1, bgcolor = "rgba(255, 255, 255, 0.5)"),  
+         margin = list(r = 150),  
+         plot_bgcolor = "rgba(211,211,211,0.2)",  
+         paper_bgcolor = "rgba(211,211,211,0.2)")  
+
+# Make the plot interactive
+scattr_pltco4 <- scattr_pltco4 %>% config(displayModeBar = TRUE)
+
+# Display the interactive plot
+scattr_pltco4
+
+
+```
+From the scatter plot, it's noticeable that maximum and minimum temperatures coincided with violent crime occurrences. In July 2023, the maximum temperature peaked at 19.9°C, aligning with a period of heightened violent crimes. In contrast,  in December 2023, the minimum temperature dropped to -3.2°C, also overlapping with reported violent crimes. This visualization suggests potential associations between temperature extremes and violent criminal activity
+
+## Exploring Correlation Between Crime Incidents and Weather Variables
+```{r}
+
+# Select  weather variables from cleaned_tempco4
+wthr_dta <- cleaned_tempco4[, c("Date", "TemperatureCAvg", "Precmm", "SunD1h")]
+
+# Merge crime incident count and weather data based on the date
+merge_datz <- left_join(dly_vcco4_cs , wthr_dta, by = c("date" = "Date"))
+
+#Calculate correlation coefficients
+cor_mat <- cor(merge_datz[, -1], use = "complete.obs")
+
+#Visualize the correlation coefficients
+hetymay_plt <- plot_ly(z = cor_mat, type = "heatmap", colorscale = "Viridis") %>%
+  layout(title = "Correlation Between Crime Incidents and Weather Variables",
+         xaxis = list(title = "Weather Variables"),
+         yaxis = list(title = "Weather Variables"),
+         margin = list(l = 100, b = 100))  # Adjust margins for better display
+
+# Display the interactive heatmap
+hetymay_plt 
+```
+The interactive heatmap visualizes the correlation coefficients between crime incidents and various weather variables. Interestingly, many correlations appear to be close to zero, indicating a lack of a strong linear relationship between crime incidents and weather factors. This finding suggests that while weather may play a role in influencing crime, its impact might not be straightforward or easily captured through linear correlation analysis alone. Other complex factors such as socioeconomic conditions, demographics, and law enforcement activities likely contribute to crime dynamics in Colchester.
+
+## Exploring Correlation Between Violent Crime Incidents and Climate Factors
+```{r}
+
+# Merge violent crime incident count and weather data based on the date
+merg_dta2 <- left_join(dly_vcco4_cs , wthr_dta, by = c("date" = "Date"))
+
+# Calculate correlation coefficients
+cor_max2 <- cor(merg_dta2[, -1], use = "complete.obs")
+
+# Visualize the correlation coefficients
+hp_vc <- plot_ly(z = cor_max2, type = "heatmap", colorscale = "Portland") %>%
+  layout(title = "Correlation Between Violent Crime Incidents and Climate factors",
+         xaxis = list(title = "Weather Variables"),
+         yaxis = list(title = "Weather Variables"),
+         margin = list(l = 100, b = 100)) 
+
+
+hp_vc
+```
+
+
+The heatmap above displays correlation coefficients between violent crime incidents and various weather variables. Notably, several correlations are close to 0.5 or above, indicating a moderate to strong positive relationship between certain weather conditions and violent crime incidents. These findings suggest that specific weather factors may indeed influence the occurrence of violent crimes in Colcheste
+
+## Exploring Weather Trends Over Time
+```{r}
+# Merge crime counts with weather data
+meda_co4 <- left_join(dc_count, cleaned_tempco4, by = c("date" = "Date"))
+
+# Create line plots for each weather variable
+tempco4_plt <- plot_ly(meda_co4, x = ~date) %>%
+  add_lines(y = ~TemperatureCAvg, name = "Average Temperature", line = list(color = 'blue')) %>%
+  layout(title = "Weather Trends Over Time in Colchester",
+         xaxis = list(title = "Date"),
+         yaxis = list(title = "Average Temperature (°C)"))
+
+precico4_plot <- plot_ly(meda_co4, x = ~date) %>%
+  add_lines(y = ~Precmm, name = "Precipitation", line = list(color = 'green')) %>%
+  layout(title = "Weather Trends Over Time in Colchester",
+         xaxis = list(title = "Date"),
+         yaxis = list(title = "Precipitation (mm)"))
+
+sunlight_plt <- plot_ly(meda_co4, x = ~date) %>%
+  add_lines(y = ~SunD1h, name = "Sunlight Hours", line = list(color = 'orange')) %>%
+  layout(title = "Weather Trends Over Time in Colchester",
+         xaxis = list(title = "Date"),
+         yaxis = list(title = "Sunlight Hours"))
+
+# Combine plots into a single subplot
+subbyplt <- subplot(tempco4_plt, precico4_plot, sunlight_plt, nrows = 3)
+
+# Make the subplot interactive
+subpc <- subbyplt %>% config(displayModeBar = TRUE)
+
+subpc
+
+
+```
+The subplot reveals changes in three essential weather factors over time in Colchester. The blue line illustrates shifts in average temperature, reaching its peak in July 2023 with 16.8 degrees Celsius. The green line showcases precipitation results, with its highest point in January 2023 with 8.2 millimeters. Lastly, the orange line depicts variations in sunlight hours, peaking in May 2023 with 10.2 hours. These observations help us comprehend how Colchester's weather evolves, which is vital for sectors like farming, city planning, and emergency readiness.
+
+
+
+# Analysis of Violent Crime Incidents by Season
+```{r}
+
+# Function to categorize dates into seasons
+get_sew <- function(date) {
+  month <- month(date)
+  if (month %in% 3:5) {
+    return("Spring")
+  } else if (month %in% 6:8) {
+    return("Summer")
+  } else if (month %in% 9:11) {
+    return("Fall")
+  } else {
+    return("Winter")
+  }
+}
+
+# Apply the function to categorize dates into seasons
+vc_co4 <- vc_co4 %>%
+  mutate(season = factor(sapply(date, get_sew)))
+
+# Aggregate violent crime incidents by season
+vc_seson <- vc_co4 %>%
+  group_by(season) %>%
+  summarise(vc_seson  = n()) 
+
+# Define custom colors for each season
+sen_colos <- c(Spring = "#FFD700", Summer = "#32CD32", Fall = "#FF4500", Winter = "#4169E1")
+
+# Apply the custom colors to the bar plot
+vil_plt <- plot_ly(data = vc_seson, x = ~season, y = ~vc_seson, type = "bar", marker = list(color = sen_colos)) %>%
+  layout(title = "Violent Crime Incidents by Season",
+         xaxis = list(title = "Season"),
+         yaxis = list(title = "Violent Crime Count"))
+
+# Display the interactive plot
+vil_plt
+
+
+```
+
+The interactive bar plot illustrates the distribution of violent crime incidents across different seasons in Colchester. Each bar represents a season, with colors indicating Spring, Summer, Fall, and Winter. Notably, the plot reveals that the highest number of violent crimes occurred during the Fall season, with a count of 693 incidents. This information can guide law enforcement agencies in implementing targeted strategies to address crime during specific seasons of the year.
+
+
+## Understanding Crime Hotspots in Colchester
+```{r}
+
+# Filtered crime data with latitude and longitude columns
+cr_dtsm <- cleaned_crimeco4 %>%
+  filter(!is.na(lat) & !is.na(long))
+
+# Calculate the 2D kernel density estimation of crime incidents
+den_we <- kde2d(cr_dtsm$long, cr_dtsm$lat)
+
+
+# Create a point density plot (heatmap)
+den_we_plt <- plot_ly(z = ~den_we$z, type = "heatmap", colorscale = "Viridis", zauto = FALSE, zmax = max(den_we$z)) %>%
+  layout(title = "Point Density Plot of Crime Incidents",
+         xaxis = list(title = "Longitude"),
+         yaxis = list(title = "Latitude"))
+
+# Display the interactive point density plot
+den_we_plt
+```
+The heatmap reveals the spatial distribution of crime incidents in Colchester, with darker regions indicating higher densities of reported crimes.
+By analyzing the heatmap, law enforcement agencies can identify areas with high crime rates, enabling them to allocate resources more effectively and implement targeted crime prevention strategies. Hotspots identified on the heatmap can serve as focal points for increased police patrols or community outreach programs aimed at reducing crime in specific neighborhoods. Understanding the geographic patterns of crime incidents can also help urban planners and policymakers make informed decisions about city development and resource allocation.
+
+
+## Exploring Violent  Crime Incidents in Colchester: A Geographic Overview
+```{r}
+
+# Define the path to the downloaded icon
+ic_pathyy <- "/Users/nithyashree/Downloads/icons8-danger-48-2.png"
+
+# Define a custom icon with popup
+cs_ic <- makeIcon(
+  iconUrl = ic_pathyy,  
+  iconWidth = 12,       
+  iconHeight = 12      
+)
+
+# Create Leaflet map for violent crimes
+vc_mapco4 <- leaflet() %>%
+  addTiles() %>%
+  addMarkers(
+    data = vc_co4,
+    lng = ~long,
+    lat = ~lat,
+    icon = cs_ic,  # Use custom icon
+    popup = ~paste("Category: ", category, "<br>Date: ", date)  
+  ) %>%
+  setView(lng = mean(vc_co4$long), lat = mean(vc_co4$lat), zoom = 12)  # Set initial view and zoom level
+vc_mapco4 
+
+```
+
+This interactive map utilizes custom danger icons to pinpoint locations of violent crime incidents in Colchester. Each icon represents a specific incident, providing information about its category and date. By exploring the map, one can identify areas with a higher concentration of violent crimes and observe any spatial patterns or clusters. Additionally, by examining the dates associated with each incident, one can detect temporal trends in violent criminal activity across different locations in Colchester. This visualization helps in understanding the geographical distribution and temporal dynamics of violent crime incidents, Useful for informed decision-making for law enforcement and community safety initiatives
+
+# Future Work
+The future work entails the development of advanced machine learning models that integrate historical crime data with meteorological information to predict the outcome status of criminal incidents, enabling prioritization of high-priority cases for investigation. These models will be seamlessly integrated with interactive data visualization tools, empowering stakeholders to derive actionable information from complex datasets and identify trends and potential hotspots in real time. Additionally, predictive algorithms will be developed to forecast future crime trends by analyzing historical patterns and weather variables, particularly focusing on temperature dynamics.
+
+
+# Conclusion
+By exploring the outcomes, dates, seasons, and crime hotspots associated with violent crimes, we highlight their significance in informing proactive law enforcement strategies.The integration of machine learning models with data visualization techniques and predictive algorithms represents a transformative approach to addressing public safety challenges. By Utilizing the power of data-driven information and advanced analytics, law enforcement agencies can make informed decisions, prioritize resources effectively, and proactively mitigate risks to enhance community safety and well-being. As technology continues to evolve, ongoing research and innovation in this field will play a vital role in shaping the future of crime prevention and law enforcement practices
+
+# References
+Kabacoff, R. (in press). Modern Data Visualization with R. Florida: CRC Press.
+
+Rahlf, T. (2017). Data Visualization with R: 100 Examples. Springer.
+
+Lowe, J., & Matthee, M. (2020). Requirements of data visualization tools to analyze big data: A structured literature review. In Responsible Design, Implementation and Use of Communication and Information
+
+Sancho, J. L. V., Domínguez, J. C., & et al. (2014). An approach to the taxonomy of data visualization.
+
+Yin, H. (2002). Data visualisation and manifold mapping using the ViSOM. Neural Networks, 15(8–9), 1005-1016. DOI: 10.1016/S0893-6080(02)00075-8.
+
